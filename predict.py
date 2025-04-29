@@ -1,29 +1,40 @@
-# predict.py
-
 import pandas as pd
 import joblib
-from sklearn.preprocessing import LabelEncoder
 
-# Load the saved model
-model = joblib.load('random_forest_upi_fraud_model.pkl')
+# Load the saved model and label encoder
+model, le = joblib.load('random_forest_upi_fraud_model.pkl')
 
-# Example new transaction (you can change the values)
-new_transaction = pd.DataFrame({
-    'type': ['TRANSFER'],  # Try changing to 'CASH_OUT', 'PAYMENT', etc.
-    'amount': [5000],
-    'oldbalanceOrg': [10000],
-    'newbalanceOrig': [5000]
-})
+# Take user input
+transaction_type = input("Enter transaction type (TRANSFER / CASH_OUT / PAYMENT / etc): ").strip().upper()
+amount = float(input("Enter transaction amount: "))
+old_balance = float(input("Enter old balance of sender: "))
+new_balance = float(input("Enter new balance of sender: "))
 
-# Encode the 'type' column same way as during training
-le = LabelEncoder()
-new_transaction['type'] = le.fit_transform(new_transaction['type'])
+# First, manually check balance error
+expected_new_balance = old_balance - amount
 
-# Predict
-prediction = model.predict(new_transaction)
-
-# Show the result
-if prediction[0] == 1:
-    print("⚠️  Alert: Fraudulent Transaction Detected!")
+if abs(expected_new_balance - new_balance) > 1:  # Small margin allowed
+    print("\n⚠️ Warning: Balance mismatch detected! Likely Fraudulent Transaction (Mathematical Check).")
 else:
-    print("✅ Safe: Transaction Looks Legitimate.")
+    # Create transaction DataFrame
+    new_transaction = pd.DataFrame({
+        'type': [transaction_type],
+        'amount': [amount],
+        'oldbalanceOrg': [old_balance],
+        'newbalanceOrig': [new_balance]
+    })
+
+    # Create the new feature
+    new_transaction['errorBalanceOrig'] = new_transaction['oldbalanceOrg'] - new_transaction['amount'] - new_transaction['newbalanceOrig']
+
+    # Encode the 'type' column
+    new_transaction['type'] = le.transform(new_transaction['type'])
+
+    # Predict using the model
+    prediction = model.predict(new_transaction)
+
+    # Show result
+    if prediction[0] == 1:
+        print("\n⚠️ Alert: Fraudulent Transaction Detected! (ML Model)")
+    else:
+        print("\n✅ Safe: Transaction Looks Legitimate. (ML Model)")
